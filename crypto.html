@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pseudo Crypto Wallet</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.15.0/ethers.umd.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-4 md:p-8">
+
+    <div id="app" class="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-6 border border-slate-100">
+        <h1 class="text-2xl font-bold mb-6 text-slate-800 border-b pb-4">Pseudo Crypto Wallet</h1>
+
+        <!-- Tabs -->
+        <div class="flex space-x-2 mb-6 bg-slate-100 p-1 rounded-lg">
+            <button onclick="showTab('wallet-tab')" class="flex-1 py-2 text-sm font-medium rounded-md hover:bg-white hover:shadow-sm transition-all">Wallet</button>
+            <button onclick="showTab('dashboard-tab')" class="flex-1 py-2 text-sm font-medium rounded-md hover:bg-white hover:shadow-sm transition-all">Dashboard</button>
+            <button onclick="showTab('transfer-tab')" class="flex-1 py-2 text-sm font-medium rounded-md hover:bg-white hover:shadow-sm transition-all">Transfer</button>
+        </div>
+
+        <!-- Wallet Tab -->
+        <div id="wallet-tab" class="tab-content active">
+            <h2 class="text-lg font-semibold mb-4 text-slate-700">Account Setup</h2>
+            <div id="wallet-setup" class="space-y-4">
+                <button onclick="createNewWallet()" class="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold">Generate New Wallet</button>
+                <div class="relative flex py-5 items-center">
+                    <div class="flex-grow border-t border-slate-200"></div>
+                    <span class="flex-shrink mx-4 text-slate-400 text-sm">OR</span>
+                    <div class="flex-grow border-t border-slate-200"></div>
+                </div>
+                <input type="password" id="priv-key-input" placeholder="Paste your Private Key" class="w-full p-3 border rounded-lg mb-2 focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-sm">
+                <button onclick="importWallet()" class="w-full py-3 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition">Import Wallet</button>
+            </div>
+            <div id="wallet-active" class="hidden space-y-4">
+                <div class="p-4 bg-slate-50 border rounded-lg">
+                    <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">Address</p>
+                    <p id="addr-display" class="font-mono text-sm break-all mt-1 text-slate-800 bg-slate-100 p-2 rounded"></p>
+                </div>
+                <button onclick="logout()" class="text-rose-500 text-sm hover:underline">Logout</button>
+            </div>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard-tab" class="tab-content">
+            <div class="text-center py-6 bg-slate-900 rounded-2xl text-white shadow-lg">
+                <p class="text-slate-400 text-sm">Available Balance</p>
+                <h2 id="balance-display" class="text-4xl font-bold my-2">0.00 TOKEN</h2>
+            </div>
+
+            <!-- Sync Section -->
+            <div class="mt-6 p-4 border border-slate-200 rounded-lg">
+                <h3 class="font-semibold text-slate-700 mb-2">Sync Blockchain (txn.txt)</h3>
+                <input type="file" id="ledger-input" onchange="handleFileUpload(event)" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+            </div>
+            
+            <!-- Admin Panel -->
+            <div id="admin-panel" class="hidden mt-6 p-4 border-2 border-dashed border-purple-200 rounded-lg bg-purple-50">
+                <h3 class="text-purple-800 font-semibold mb-2">Admin Console</h3>
+                <div class="flex gap-2">
+                    <button onclick="generateTx('MINT')" class="flex-1 bg-purple-600 text-white py-2 rounded font-medium hover:bg-purple-700 transition">Mint (Issue)</button>
+                    <button onclick="generateTx('BURN')" class="flex-1 bg-purple-800 text-white py-2 rounded font-medium hover:bg-purple-800 transition">Burn (Destroy)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transfer Tab -->
+        <div id="transfer-tab" class="tab-content">
+            <div class="space-y-4 p-4 border rounded-lg bg-slate-50">
+                <h3 class="font-semibold text-slate-700">Send Tokens</h3>
+                <input type="text" id="recipient" placeholder="Recipient Address" class="w-full p-2 border rounded focus:ring-2 outline-none">
+                <input type="number" id="amount" placeholder="Amount" class="w-full p-2 border rounded focus:ring-2 outline-none">
+                <button onclick="generateTx('SEND')" class="w-full py-2 bg-emerald-600 text-white rounded font-semibold hover:bg-emerald-700 transition">Create Transaction</button>
+            </div>
+            <div id="tx-output-area" class="hidden mt-4">
+                <h4 class="text-xs font-bold text-slate-500 uppercase mb-1">New TX (Copy to txn.txt)</h4>
+                <textarea id="tx-output" readonly class="w-full h-24 p-2 text-xs font-mono bg-slate-900 text-emerald-400 rounded"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Define admin constant
+        const ADMIN_ADDRESS = "0x742d35cc6634c0532925a3b844bc454e4438f44e";
+        
+        let currentWallet = null;
+        let transactions = [];
+        let balance = 0.0;
+
+        function showTab(id) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function updateUI() {
+            if (currentWallet) {
+                document.getElementById('wallet-setup').classList.add('hidden');
+                document.getElementById('wallet-active').classList.remove('hidden');
+                document.getElementById('addr-display').innerText = currentWallet.address;
+                
+                // Admin check
+                if (currentWallet.address.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
+                    document.getElementById('admin-panel').classList.remove('hidden');
+                } else {
+                    document.getElementById('admin-panel').classList.add('hidden');
+                }
+            } else {
+                document.getElementById('wallet-setup').classList.remove('hidden');
+                document.getElementById('wallet-active').classList.add('hidden');
+                document.getElementById('admin-panel').classList.add('hidden');
+            }
+            document.getElementById('balance-display').innerText = balance.toFixed(2) + " TOKEN";
+        }
+
+        function createNewWallet() {
+            const wallet = ethers.Wallet.createRandom();
+            // Using a non-intrusive way to show key
+            alert(`SECRET KEY GENERATED:\n${wallet.privateKey}\n\nSAVE THIS KEY! It will NOT be saved in the browser.`);
+            currentWallet = wallet;
+            updateUI();
+        }
+
+        function importWallet() {
+            const key = document.getElementById('priv-key-input').value;
+            try {
+                currentWallet = new ethers.Wallet(key);
+                updateUI();
+            } catch (e) {
+                alert("Invalid Private Key");
+            }
+        }
+
+        function logout() {
+            currentWallet = null;
+            balance = 0.0;
+            transactions = [];
+            updateUI();
+        }
+
+        // Processing the uploaded ledger file
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                processLedgerData(text);
+            };
+            reader.readAsText(file);
+        }
+
+        function processLedgerData(data) {
+            const lines = data.split('\n');
+            let tempBalance = 0;
+            const myAddr = currentWallet.address.toLowerCase();
+
+            transactions = [];
+
+            lines.forEach(line => {
+                if (line.trim() === '') return;
+                try {
+                    const tx = JSON.parse(line);
+                    transactions.push(tx);
+
+                    // Logic:
+                    // MINT: if to == me, +
+                    // BURN: if from == me, -
+                    // SEND: if from == me, -, if to == me, +
+                    if (tx.type === 'MINT' && tx.to.toLowerCase() === myAddr) tempBalance += tx.amount;
+                    if (tx.type === 'BURN' && tx.from.toLowerCase() === myAddr) tempBalance -= tx.amount;
+                    if (tx.type === 'SEND') {
+                        if (tx.from.toLowerCase() === myAddr) tempBalance -= tx.amount;
+                        if (tx.to.toLowerCase() === myAddr) tempBalance += tx.amount;
+                    }
+                } catch(e) { console.error("Invalid line format", e); }
+            });
+
+            balance = tempBalance;
+            updateUI();
+            alert("Ledger synced successfully!");
+        }
+
+        // Generate a new transaction string for the user to copy
+        function generateTx(type) {
+            if (!currentWallet) return alert("Please login first.");
+
+            let txData = {
+                type: type,
+                timestamp: new Date().toISOString(),
+                from: (type === 'MINT') ? 'SYSTEM' : currentWallet.address,
+                to: (type === 'MINT' || type === 'BURN') ? currentWallet.address : document.getElementById('recipient').value,
+                amount: parseFloat(document.getElementById('amount').value) || 100
+            };
+
+            const jsonStr = JSON.stringify(txData);
+            const outputArea = document.getElementById('tx-output-area');
+            const outputField = document.getElementById('tx-output');
+            
+            outputField.value = jsonStr;
+            outputArea.classList.remove('hidden');
+        }
+
+        window.onload = updateUI;
+    </script>
+</body>
+</html>
