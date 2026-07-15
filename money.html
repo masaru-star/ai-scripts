@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>架空通貨マルチマネージャー (Fictional Currency Manager)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts Inter & Noto Sans JP -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN for visual analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans JP', 'sans-serif'],
+                    },
+                    colors: {
+                        cyber: {
+                            50: '#f0f4ff',
+                            100: '#d9e2ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81',
+                            950: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbars and styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6366f1;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-full flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+
+    
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-md w-full pointer-events-none"></div>
+
+    <!-- Main Navigation Header -->
+    <header class="border-b border-slate-800/80 bg-slate-900/90 sticky top-0 z-40 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Brand Logo -->
+                <div class="flex items-center space-x-3">
+                    <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <span class="text-lg font-bold tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
+                            X-CURRENCY
+                        </span>
+                        <span class="text-xs block text-slate-400 font-medium">架空通貨統合管理システム</span>
+                    </div>
+                </div>
+
+                <!-- Navigation Tabs (Desktop) -->
+                <nav class="hidden md:flex space-x-1" aria-label="Tabs">
+                    <button onclick="switchTab('dashboard')" id="tab-btn-dashboard" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg text-indigo-400 bg-slate-800/60 border border-indigo-500/20 transition-all duration-200">
+                        ダッシュボード
+                    </button>
+                    <button onclick="switchTab('currencies')" id="tab-btn-currencies" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/30 transition-all duration-200">
+                        通貨設定
+                    </button>
+                    <button onclick="switchTab('accounts')" id="tab-btn-accounts" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/30 transition-all duration-200">
+                        口座管理
+                    </button>
+                    <button onclick="switchTab('operations')" id="tab-btn-operations" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/30 transition-all duration-200">
+                        取引・移動
+                    </button>
+                    <button onclick="switchTab('ledger')" id="tab-btn-ledger" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/30 transition-all duration-200">
+                        履歴一覧
+                    </button>
+                </nav>
+
+                <!-- Reset Database Action Button -->
+                <div class="flex items-center space-x-2">
+                    <!-- Export JSON Button -->
+                    <button onclick="exportDataJSON()" class="p-2 text-xs text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded-lg border border-indigo-500/20 transition-all" title="データをJSON形式でエクスポート">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                    </button>
+                    <!-- Import JSON Button -->
+                    <button onclick="triggerImportJSON()" class="p-2 text-xs text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg border border-emerald-500/20 transition-all" title="JSON形式からインポート">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                    </button>
+                    <button onclick="confirmResetData()" class="p-2 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg border border-rose-500/20 transition-all" title="データを初期化">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- Mobile Navigation Menu -->
+        <div class="md:hidden border-t border-slate-800/80 bg-slate-900/90 flex justify-around p-2">
+            <button onclick="switchTab('dashboard')" class="mobile-tab-btn flex flex-col items-center flex-1 text-indigo-400 py-1" id="m-tab-btn-dashboard">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z" stroke-width="2"/></svg>
+                <span class="text-[10px] mt-1">ダッシュボード</span>
+            </button>
+            <button onclick="switchTab('currencies')" class="mobile-tab-btn flex flex-col items-center flex-1 text-slate-400 py-1" id="m-tab-btn-currencies">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg>
+                <span class="text-[10px] mt-1">通貨</span>
+            </button>
+            <button onclick="switchTab('accounts')" class="mobile-tab-btn flex flex-col items-center flex-1 text-slate-400 py-1" id="m-tab-btn-accounts">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" stroke-width="2"/></svg>
+                <span class="text-[10px] mt-1">口座</span>
+            </button>
+            <button onclick="switchTab('operations')" class="mobile-tab-btn flex flex-col items-center flex-1 text-slate-400 py-1" id="m-tab-btn-operations">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" stroke-width="2"/></svg>
+                <span class="text-[10px] mt-1">取引</span>
+            </button>
+            <button onclick="switchTab('ledger')" class="mobile-tab-btn flex flex-col items-center flex-1 text-slate-400 py-1" id="m-tab-btn-ledger">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" stroke-width="2"/></svg>
+                <span class="text-[10px] mt-1">履歴</span>
+            </button>
+        </div>
+    </header>
+
+    
+    <!-- Main Application Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- ==================== DASHBOARD PANEL ==================== -->
+        <section id="panel-dashboard" class="space-y-6">
+            <!-- Summary Stats Widgets -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="glass-panel p-6 rounded-2xl flex items-center justify-between">
+                    <div>
+                        <span class="text-sm text-slate-400 block font-medium">登録通貨種別</span>
+                        <span id="stat-currency-count" class="text-3xl font-bold text-white mt-1">--</span>
+                    </div>
+                    <div class="p-3 bg-indigo-500/10 rounded-xl text-indigo-400">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg>
+                    </div>
+                </div>
+                <div class="glass-panel p-6 rounded-2xl flex items-center justify-between">
+                    <div>
+                        <span class="text-sm text-slate-400 block font-medium">アクティブ口座数</span>
+                        <span id="stat-account-count" class="text-3xl font-bold text-white mt-1">--</span>
+                    </div>
+                    <div class="p-3 bg-purple-500/10 rounded-xl text-purple-400">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" stroke-width="2"/></svg>
+                    </div>
+                </div>
+                <div class="glass-panel p-6 rounded-2xl flex items-center justify-between col-span-1 md:col-span-2">
+                    <div>
+                        <span class="text-sm text-slate-400 block font-medium">総取引回数</span>
+                        <span id="stat-tx-count" class="text-3xl font-bold text-white mt-1">--</span>
+                        <span class="text-xs text-indigo-400 ml-2" id="stat-last-tx-time"></span>
+                    </div>
+                    <div class="p-3 bg-amber-500/10 rounded-xl text-amber-400">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visualization row -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Portfolio Share Chart -->
+                <div class="glass-panel p-6 rounded-2xl flex flex-col justify-between h-[360px]">
+                    <div>
+                        <h3 class="text-lg font-semibold text-white">市場流通シェア率</h3>
+                        <p class="text-xs text-slate-400">各通貨のベース価値に換算した流通シェア</p>
+                    </div>
+                    <div class="flex-grow flex items-center justify-center relative mt-4 h-56">
+                        <canvas id="portfolioChart"></canvas>
+                        <div id="no-chart-data" class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm hidden flex-col items-center justify-center rounded-xl text-center p-4">
+                            <span class="text-slate-400 text-sm">取引履歴または残高データが不足しています</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Currency Quick Table -->
+                <div class="glass-panel p-6 rounded-2xl lg:col-span-2 flex flex-col justify-between h-[360px]">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-white">通貨流通ステータス</h3>
+                            <p class="text-xs text-slate-400">市場に存在する各通貨の合計保有量</p>
+                        </div>
+                        <button onclick="switchTab('currencies')" class="text-xs text-indigo-400 hover:text-indigo-300">通貨を増やす &rarr;</button>
+                    </div>
+                    <div class="overflow-y-auto flex-grow pr-1">
+                        <table class="min-w-full divide-y divide-slate-800">
+                            <thead>
+                                <tr class="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                    <th class="pb-3">通貨</th>
+                                    <th class="pb-3 text-right">発行総数（保有計）</th>
+                                    <th class="pb-3 text-right">基準レート(対GOLD)</th>
+                                    <th class="pb-3 text-right">流通評価額(GOLD換算)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dashboard-currency-tbody" class="divide-y divide-slate-800 text-sm">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Wallets Grid Overview -->
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 class="text-lg font-bold text-white">登録口座・ウォレット一覧</h3>
+                        <p class="text-xs text-slate-400">各口座の保有アセット状況</p>
+                    </div>
+                    <button onclick="switchTab('accounts')" class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-lg transition-all">
+                        + 新規口座を開設
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="dashboard-accounts-grid">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ==================== CURRENCIES PANEL ==================== -->
+        <section id="panel-currencies" class="space-y-6 hidden">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">架空通貨の管理・発行</h2>
+                    <p class="text-sm text-slate-400">ゲーム内の独自通貨や、ファンタジー金貨、特定のトークンを新規作成、変更、消滅できます。</p>
+                </div>
+                <button onclick="openModal('currency-modal')" class="px-4 py-2 text-sm font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center space-x-2">
+                    <span>+ 新通貨を作成</span>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="currencies-list-grid">
+                <!-- Dynamically populated card structure -->
+            </div>
+        </section>
+
+
+        <!-- ==================== ACCOUNTS PANEL ==================== -->
+        <section id="panel-accounts" class="space-y-6 hidden">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">保有者・口座管理</h2>
+                    <p class="text-sm text-slate-400">通貨を保有するキャラクター、勢力、保管場所などを自由に追加・削除します。</p>
+                </div>
+                <button onclick="openModal('account-modal')" class="px-4 py-2 text-sm font-semibold bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-xl shadow-lg shadow-purple-500/20 transition-all flex items-center space-x-2">
+                    <span>+ 口座を追加</span>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Account List Manager -->
+                <div class="lg:col-span-2 space-y-4">
+                    <h3 class="text-lg font-bold text-white border-b border-slate-800 pb-2">アクティブ口座一覧</h3>
+                    <div class="space-y-4" id="accounts-management-list">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </div>
+
+                <!-- Fast Balance Adjustment Tool -->
+                <div class="glass-panel p-6 rounded-2xl h-fit space-y-4">
+                    <h3 class="text-lg font-bold text-white">クイック残高発行 / 回収</h3>
+                    <p class="text-xs text-slate-400">管理権限を行使して、任意の口座の通貨量を強制的に直接増減（ミント/バーン）します。</p>
+                    
+                    <form id="mint-burn-form" onsubmit="handleMintBurn(event)" class="space-y-4 text-sm">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">取引種別</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <label class="border border-indigo-500/30 bg-indigo-500/10 rounded-lg p-2 flex items-center justify-center cursor-pointer hover:bg-indigo-500/20 transition-all">
+                                    <input type="radio" name="mintburn_type" value="mint" checked class="accent-indigo-500 mr-2">
+                                    <span class="font-medium text-slate-200">新規発行 (増額)</span>
+                                </label>
+                                <label class="border border-rose-500/30 bg-rose-500/10 rounded-lg p-2 flex items-center justify-center cursor-pointer hover:bg-rose-500/20 transition-all">
+                                    <input type="radio" name="mintburn_type" value="burn" class="accent-rose-500 mr-2">
+                                    <span class="font-medium text-slate-200">強制回収 (減額)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="mintburn-account" class="block text-xs font-semibold text-slate-300 mb-1">対象口座</label>
+                            <select id="mintburn-account" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required></select>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label for="mintburn-currency" class="block text-xs font-semibold text-slate-300 mb-1">対象通貨</label>
+                                <select id="mintburn-currency" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required></select>
+                            </div>
+                            <div>
+                                <label for="mintburn-amount" class="block text-xs font-semibold text-slate-300 mb-1">数量</label>
+                                <input type="number" id="mintburn-amount" step="any" min="0.000001" placeholder="0.00" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="mintburn-note" class="block text-xs font-semibold text-slate-300 mb-1">理由 / 備考</label>
+                            <input type="text" id="mintburn-note" placeholder="例: クエスト報酬、デバッグ目的など" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                        </div>
+
+                        <button type="submit" class="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg transition-all">
+                            変更を適用する
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ==================== OPERATIONS PANEL ==================== -->
+        <section id="panel-operations" class="space-y-6 hidden">
+            <div class="border-b border-slate-800 pb-4">
+                <h2 class="text-2xl font-bold text-white">通貨移動と両替・交換</h2>
+                <p class="text-sm text-slate-400">口座間で資金を移す「資金移動」と、同一口座内でレートに基づいて両替する「通貨交換」を行えます。</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Transfer Operation Form -->
+                <div class="glass-panel p-6 rounded-2xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="p-2.5 bg-indigo-500/20 text-indigo-400 rounded-xl">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" stroke-width="2"/></svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-white">① 口座間での資金移動（送金）</h3>
+                                <p class="text-xs text-slate-400">異なる口座間で、同一の通貨を送信します。</p>
+                            </div>
+                        </div>
+
+                        <form id="transfer-form" onsubmit="handleTransfer(event)" class="space-y-4 text-sm mt-4">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label for="tx-from" class="block text-xs font-semibold text-slate-300 mb-1">出金元口座</label>
+                                    <select id="tx-from" onchange="updateTransferLimits()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required></select>
+                                </div>
+                                <div>
+                                    <label for="tx-to" class="block text-xs font-semibold text-slate-300 mb-1">入金先口座</label>
+                                    <select id="tx-to" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required></select>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label for="tx-currency" class="block text-xs font-semibold text-slate-300 mb-1">移動する通貨</label>
+                                    <select id="tx-currency" onchange="updateTransferLimits()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required></select>
+                                </div>
+                                <div>
+                                    <label for="tx-amount" class="block text-xs font-semibold text-slate-300 mb-1">数量</label>
+                                    <input type="number" id="tx-amount" step="any" min="0.000001" placeholder="0.00" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required>
+                                    <span id="tx-max-hint" class="text-[10px] text-slate-400 mt-1 block">保有残高: --</span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="tx-note" class="block text-xs font-semibold text-slate-300 mb-1">取引内容 / 備考</label>
+                                <input type="text" id="tx-note" placeholder="例: クエスト協力金、旅費仕送り" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+
+                            <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-md shadow-indigo-500/20">
+                                資金移動を実行する
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Swap Exchange Operation Form -->
+                <div class="glass-panel p-6 rounded-2xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="p-2.5 bg-purple-500/20 text-purple-400 rounded-xl">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-white">② 同一口座内での通貨交換 (両替)</h3>
+                                <p class="text-xs text-slate-400">通貨間の相対基準レートを基に、手持ちアセットを交換します。</p>
+                            </div>
+                        </div>
+
+                        <form id="exchange-form" onsubmit="handleExchange(event)" class="space-y-4 text-sm mt-4">
+                            <div>
+                                <label for="swap-account" class="block text-xs font-semibold text-slate-300 mb-1">対象口座</label>
+                                <select id="swap-account" onchange="updateSwapLimits()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required></select>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3 items-center">
+                                <div>
+                                    <label for="swap-from-curr" class="block text-xs font-semibold text-slate-300 mb-1">支払う通貨 (From)</label>
+                                    <select id="swap-from-curr" onchange="updateSwapLimits(); calculateExpectedSwap();" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required></select>
+                                    <span id="swap-max-hint" class="text-[10px] text-slate-400 mt-1 block">保有残高: --</span>
+                                </div>
+                                <div>
+                                    <label for="swap-to-curr" class="block text-xs font-semibold text-slate-300 mb-1">受け取る通貨 (To)</label>
+                                    <select id="swap-to-curr" onchange="calculateExpectedSwap();" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required></select>
+                                    <span id="swap-rate-hint" class="text-[10px] text-indigo-400 mt-1 block">交換レート: --</span>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label for="swap-amount" class="block text-xs font-semibold text-slate-300 mb-1">支払う数量</label>
+                                    <input type="number" id="swap-amount" step="any" min="0.000001" oninput="calculateExpectedSwap()" placeholder="0.00" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required>
+                                </div>
+                                <div>
+                                    <label for="swap-result" class="block text-xs font-semibold text-slate-300 mb-1">推定受取量</label>
+                                    <input type="text" id="swap-result" readonly placeholder="自動計算" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-slate-400 cursor-not-allowed">
+                                </div>
+                            </div>
+
+                            <button type="submit" class="w-full py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all shadow-md shadow-purple-500/20">
+                                通貨交換を実行する
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ==================== LEDGER PANEL ==================== -->
+        <section id="panel-ledger" class="space-y-6 hidden">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">移動・交換履歴 (統合台帳)</h2>
+                    <p class="text-sm text-slate-400">システム上のすべての通貨変動履歴をトラッキングします。</p>
+                </div>
+                <button onclick="clearLedger()" class="text-xs px-3 py-2 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-300 transition-all">
+                    履歴のみ一括消去
+                </button>
+            </div>
+
+            <!-- Filter Console -->
+            <div class="glass-panel p-4 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <div>
+                    <label for="ledger-search" class="block text-xs text-slate-400 mb-1 font-semibold">キーワード検索 (理由等)</label>
+                    <input type="text" id="ledger-search" oninput="filterLedger()" placeholder="例: クエスト、お試し..." class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label for="ledger-filter-type" class="block text-xs text-slate-400 mb-1 font-semibold">取引種別</label>
+                    <select id="ledger-filter-type" onchange="filterLedger()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        <option value="all">すべて表示</option>
+                        <option value="transfer">資金移動（送金）</option>
+                        <option value="exchange">通貨交換（両替）</option>
+                        <option value="mint">新規発行</option>
+                        <option value="burn">強制回収</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="ledger-filter-currency" class="block text-xs text-slate-400 mb-1 font-semibold">関係する通貨</label>
+                    <select id="ledger-filter-currency" onchange="filterLedger()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        <!-- Populated dynamic list of currencies -->
+                    </select>
+                </div>
+            </div>
+
+            <!-- Ledger Table -->
+            <div class="glass-panel rounded-2xl overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-800">
+                        <thead class="bg-slate-900/50">
+                            <tr class="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                <th class="px-6 py-4">取引日時</th>
+                                <th class="px-6 py-4">種別</th>
+                                <th class="px-6 py-4">取引内容</th>
+                                <th class="px-6 py-4 text-right">移動量・差分</th>
+                                <th class="px-6 py-4">備考 / ID</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ledger-tbody" class="divide-y divide-slate-800/60 text-sm">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Empty state -->
+                <div id="ledger-empty-state" class="py-12 flex flex-col items-center justify-center text-slate-500 hidden">
+                    <svg class="w-12 h-12 mb-2 stroke-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span>該当する取引履歴は見つかりませんでした</span>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer content -->
+    <footer class="border-t border-slate-900 bg-slate-950 py-6 mt-auto text-center text-xs text-slate-600">
+        <div class="max-w-7xl mx-auto px-4">
+            <p>© 2026 X-CURRENCY Fictional Ecosystem Core. All Rights Reserved.</p>
+        </div>
+    </footer>
+
+
+    <!-- ==================== MODALS ==================== -->
+
+
+    <!-- 1. Currency Add/Edit Modal -->
+    <div id="currency-modal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <!-- Background overlay -->
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity" onclick="closeModal('currency-modal')"></div>
+            <!-- Center modal -->
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div class="inline-block align-bottom bg-slate-900 border border-slate-800 text-left rounded-2xl shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full overflow-hidden">
+                <div class="p-6">
+                    <div class="flex justify-between items-center mb-4 pb-2 border-b border-slate-800">
+                        <h3 class="text-lg font-bold text-white" id="currency-modal-title">新規架空通貨の設定</h3>
+                        <button onclick="closeModal('currency-modal')" class="text-slate-400 hover:text-white">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                    
+                    <form id="currency-form" onsubmit="handleSaveCurrency(event)" class="space-y-4 text-sm">
+                        <input type="hidden" id="currency-id">
+                        
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="col-span-2">
+                                <label for="curr-name" class="block text-xs text-slate-300 font-semibold mb-1">通貨名</label>
+                                <input type="text" id="curr-name" placeholder="例: ギル、エーテルクリスタル" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required>
+                            </div>
+                            <div>
+                                <label for="curr-symbol" class="block text-xs text-slate-300 font-semibold mb-1">シンボル/単位</label>
+                                <input type="text" id="curr-symbol" placeholder="例: GIL, ETHR" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label for="curr-rate" class="block text-xs text-slate-300 font-semibold mb-1">交換基準比率 (対GOLD)</label>
+                                <input type="number" id="curr-rate" step="any" min="0.000001" placeholder="1.0" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required>
+                                <span class="text-[10px] text-slate-500 mt-1 block">1 GOLD = X 通貨</span>
+                            </div>
+                            <div>
+                                <label for="curr-color" class="block text-xs text-slate-300 font-semibold mb-1">テーマカラー</label>
+                                <div class="flex items-center space-x-2">
+                                    <input type="color" id="curr-color" value="#6366f1" class="bg-slate-800 border border-slate-700 rounded-lg h-9 w-14 cursor-pointer">
+                                    <span class="text-xs text-slate-400">表示に使うアクセント色</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="curr-desc" class="block text-xs text-slate-300 font-semibold mb-1">説明 / 世界観</label>
+                            <textarea id="curr-desc" rows="2" placeholder="通貨の起源、またはどのような取引で使われるか等のメモ" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500"></textarea>
+                        </div>
+
+                        <div id="currency-mint-fields">
+                            <label for="curr-initial" class="block text-xs text-slate-300 font-semibold mb-1">初期設定: 保有者への配分</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <select id="curr-initial-account" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                                    <option value="">(配分しない・0スタート)</option>
+                                    <!-- Populated on open -->
+                                </select>
+                                <input type="number" id="curr-initial-amount" step="any" min="0" placeholder="配分数量" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <span class="text-[10px] text-slate-400 mt-1 block">新規作成時に初期資金として設定した口座に給付します。</span>
+                        </div>
+
+                        <div class="flex justify-end space-x-2 pt-4 border-t border-slate-800">
+                            <button type="button" onclick="closeModal('currency-modal')" class="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium">キャンセル</button>
+                            <button type="submit" class="px-4 py-2 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold">適用・作成</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Account Add/Edit Modal -->
+    <div id="account-modal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <!-- Background overlay -->
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity" onclick="closeModal('account-modal')"></div>
+            <!-- Center modal -->
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div class="inline-block align-bottom bg-slate-900 border border-slate-800 text-left rounded-2xl shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full overflow-hidden">
+                <div class="p-6">
+                    <div class="flex justify-between items-center mb-4 pb-2 border-b border-slate-800">
+                        <h3 class="text-lg font-bold text-white" id="account-modal-title">新規口座の作成</h3>
+                        <button onclick="closeModal('account-modal')" class="text-slate-400 hover:text-white">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                    
+                    <form id="account-form" onsubmit="handleSaveAccount(event)" class="space-y-4 text-sm">
+                        <input type="hidden" id="account-id">
+                        
+                        <div>
+                            <label for="acc-name" class="block text-xs text-slate-300 font-semibold mb-1">口座・名義人名</label>
+                            <input type="text" id="acc-name" placeholder="例: 伝説の勇者、ギルド連合保管庫、秘密金庫" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" required>
+                        </div>
+
+                        <div>
+                            <label for="acc-desc" class="block text-xs text-slate-300 font-semibold mb-1">口座説明 / ロールプレイ</label>
+                            <input type="text" id="acc-desc" placeholder="例: メイン主人公一行の共同財布" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                        </div>
+
+                        <div class="flex justify-end space-x-2 pt-4 border-t border-slate-800">
+                            <button type="button" onclick="closeModal('account-modal')" class="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium">キャンセル</button>
+                            <button type="submit" class="px-4 py-2 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold">作成・更新</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file input for JSON import -->
+    <input type="file" id="import-file-input" class="hidden" accept=".json" onchange="handleImportJSON(event)">
+
+
+    <!-- ==================== LOGIC / SCRIPT SECTION ==================== -->
+    <script>
+
+        // Constant Key for localStorage
+        const STORAGE_KEY = 'FICTIONAL_CURRENCY_STATE_v1';
+
+        // Default Currency Data State
+        const INITIAL_STATE = {
+            currencies: [
+                { id: 'gold', name: 'ゴールド (GOLD)', symbol: 'G', rate: 1.0, color: '#f59e0b', description: '全土で通用する共通の基準金貨。すべての架空通貨の交換レートのベースとなります。', isDefault: true },
+                { id: 'mana', name: 'マナクリスタル', symbol: 'MC', rate: 0.25, color: '#06b6d4', description: '魔法使い達の間で使用される高密度に濃縮されたマナの結晶。', isDefault: false },
+                { id: 'relic', name: '古の魔鉱石', symbol: 'RSC', rate: 45.0, color: '#a855f7', description: '遺跡から稀に出土する貴重な未知の超常エネルギー鉱石。', isDefault: false },
+                { id: 'bronze', name: '銅貨', symbol: 'c', rate: 100.0, color: '#b45309', description: '一般庶民の日常の買い物等で使用される補助的流通硬貨。', isDefault: false }
+            ],
+            accounts: [
+                { id: 'acc_hero', name: '勇者旅一座の財布', desc: '魔王討伐を目指すアルス一行の共同資金入れ', balances: { 'gold': 1250, 'mana': 15, 'relic': 1, 'bronze': 450 } },
+                { id: 'acc_guild', name: '冒険者ギルド本部金庫', desc: 'クエスト発注や依頼料、税収をプールする総本山の巨大金庫', balances: { 'gold': 120000, 'mana': 850, 'relic': 40, 'bronze': 15000 } },
+                { id: 'acc_witch', name: '秘密の魔女の薬局', desc: '禁術ポーションや希少なハーブの取引を専門に行う秘術研究室', balances: { 'gold': 450, 'mana': 240, 'relic': 3, 'bronze': 120 } }
+            ],
+            transactions: [
+                { id: 'tx_init_1', timestamp: '2026-07-10T10:00:00.000Z', type: 'mint', fromAccountId: null, toAccountId: 'acc_hero', currencyId: 'gold', amount: 1250, toAmount: null, description: '初期冒険資金の割り当て' },
+                { id: 'tx_init_2', timestamp: '2026-07-10T11:30:00.000Z', type: 'transfer', fromAccountId: 'acc_guild', toAccountId: 'acc_hero', currencyId: 'mana', amount: 15, toAmount: null, description: 'クエスト「遺跡調査」の前払い報酬' },
+                { id: 'tx_init_3', timestamp: '2026-07-11T09:15:00.000Z', type: 'exchange', fromAccountId: 'acc_witch', toAccountId: 'acc_witch', currencyId: 'gold', toCurrencyId: 'mana', amount: 50, toAmount: 200, description: '秘密薬局内での錬金術用マナ両替' }
+            ]
+        };
+
+        let state = {};
+        let portfolioChartInstance = null;
+
+        // Export state as JSON file
+        function exportDataJSON() {
+            try {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+                const downloadAnchor = document.createElement('a');
+                downloadAnchor.setAttribute("href", dataStr);
+                
+                // Set default file name with date stamp
+                const dateStr = new Date().toISOString().split('T')[0];
+                downloadAnchor.setAttribute("download", `x_currency_data_${dateStr}.json`);
+                
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+                
+                notify('success', 'データをJSONファイルとしてエクスポートしました。');
+            } catch (e) {
+                console.error("Export failed", e);
+                notify('error', 'エクスポート中にエラーが発生しました。');
+            }
+        }
+
+        // Trigger hidden file dialog
+        function triggerImportJSON() {
+            document.getElementById('import-file-input').click();
+        }
+
+        // Handle selected file and import data
+        function handleImportJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedState = JSON.parse(e.target.result);
+                    
+                    // Simple validation to check essential keys
+                    if (!importedState.currencies || !importedState.accounts || !importedState.transactions) {
+                        throw new Error("必要なデータ構造が見つかりません。");
+                    }
+
+                    if (confirm("インポートを実行すると、現在ブラウザに保存されているデータは完全に上書きされます。よろしいですか？")) {
+                        state = importedState;
+                        saveState();
+                        updateUI();
+                        notify('success', 'データをインポートし、状態を復元しました。');
+                    }
+                } catch (err) {
+                    console.error("Import failed", err);
+                    notify('error', 'データのインポートに失敗しました。正しいJSON形式であることを確認してください。');
+                }
+                // Clear input value to allow uploading same file again
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        
+        // Load / Initialize state
+        function initApp() {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    state = JSON.parse(stored);
+                } else {
+                    state = JSON.parse(JSON.stringify(INITIAL_STATE));
+                    saveState();
+                }
+            } catch (e) {
+                console.error("Storage load failed", e);
+                state = JSON.parse(JSON.stringify(INITIAL_STATE));
+            }
+            
+            // Build the UI elements
+            updateUI();
+            
+            // Default select panel
+            switchTab('dashboard');
+        }
+
+        function saveState() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+
+        function notify(type, text) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colorClass = type === 'success' ? 'border-emerald-500/30 bg-emerald-950/90 text-emerald-300' 
+                             : type === 'error' ? 'border-rose-500/30 bg-rose-950/90 text-rose-300'
+                             : 'border-indigo-500/30 bg-indigo-950/90 text-indigo-300';
+            
+            toast.className = `p-4 rounded-xl border ${colorClass} shadow-xl flex items-center space-x-2 transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto`;
+            toast.innerHTML = `
+                <div class="flex-shrink-0">
+                    ${type === 'success' ? '<svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg>' :
+                      type === 'error' ? '<svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg>' :
+                      '<svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg>'}
+                </div>
+                <div class="text-xs font-semibold flex-grow">${text}</div>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Trigger animation
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+            
+            // Remove after delay
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-[-10px]');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 4000);
+        }
+
+
+        // Generate dynamic IDs
+        function makeId(prefix) {
+            return prefix + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // Database Reset
+        function confirmResetData() {
+            if (confirm("全ての取引履歴、追加した通貨、設定した口座が消去され、デフォルト設定に戻ります。本当によろしいですか？")) {
+                state = JSON.parse(JSON.stringify(INITIAL_STATE));
+                saveState();
+                updateUI();
+                notify('success', 'データベースが初期化されました。');
+                switchTab('dashboard');
+            }
+        }
+
+        // Form Submit for currency creation / editing
+        function handleSaveCurrency(e) {
+            e.preventDefault();
+            const id = document.getElementById('currency-id').value;
+            const name = document.getElementById('curr-name').value.trim();
+            const symbol = document.getElementById('curr-symbol').value.trim();
+            const rate = parseFloat(document.getElementById('curr-rate').value);
+            const color = document.getElementById('curr-color').value;
+            const description = document.getElementById('curr-desc').value.trim();
+            
+            if (!name || !symbol || isNaN(rate) || rate <= 0) {
+                notify('error', '必須入力フィールドを正しく入力してください。');
+                return;
+            }
+
+            if (id) {
+                // Edit existing
+                const index = state.currencies.findIndex(c => c.id === id);
+                if (index !== -1) {
+                    state.currencies[index].name = name;
+                    state.currencies[index].symbol = symbol;
+                    state.currencies[index].rate = rate;
+                    state.currencies[index].color = color;
+                    state.currencies[index].description = description;
+                    notify('success', `通貨「${name}」を更新しました。`);
+                }
+            } else {
+                // Verify uniqueness of symbol
+                if (state.currencies.some(c => c.symbol.toLowerCase() === symbol.toLowerCase())) {
+                    notify('error', 'このシンボルは既に別の通貨で使用されています。');
+                    return;
+                }
+
+                // Create new
+                const newId = 'curr_' + symbol.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const newCurr = { id: newId, name, symbol, rate, color, description, isDefault: false };
+                state.currencies.push(newCurr);
+
+                // Initial allocation if selected
+                const initAccId = document.getElementById('curr-initial-account').value;
+                const initAmount = parseFloat(document.getElementById('curr-initial-amount').value);
+                
+                if (initAccId && !isNaN(initAmount) && initAmount > 0) {
+                    const acc = state.accounts.find(a => a.id === initAccId);
+                    if (acc) {
+                        if (!acc.balances) acc.balances = {};
+                        acc.balances[newId] = initAmount;
+                        
+                        // Log mint transaction
+                        state.transactions.unshift({
+                            id: makeId('tx'),
+                            timestamp: new Date().toISOString(),
+                            type: 'mint',
+                            fromAccountId: null,
+                            toAccountId: initAccId,
+                            currencyId: newId,
+                            amount: initAmount,
+                            toAmount: null,
+                            description: `新通貨「${name}」発行時の初期配分`
+                        });
+                    }
+                }
+                notify('success', `新通貨「${name}」を作成・発行しました。`);
+            }
+
+            saveState();
+            closeModal('currency-modal');
+            updateUI();
+        }
+
+        function deleteCurrency(currId) {
+            const curr = state.currencies.find(c => c.id === currId);
+            if (!curr) return;
+            
+            if (curr.isDefault) {
+                notify('error', 'ゴールド（基準金貨）はシステム標準の通貨であるため削除できません。');
+                return;
+            }
+
+            // Check if there are active balances
+            let activeHolders = 0;
+            state.accounts.forEach(a => {
+                if (a.balances && a.balances[currId] && a.balances[currId] > 0) {
+                    activeHolders++;
+                }
+            });
+
+            const confirmText = activeHolders > 0 
+                ? `この通貨は現在、${activeHolders}つの口座に保有残高があります（削除すると残高データも消滅します）。本当にこの通貨を削除しますか？`
+                : `通貨「${curr.name}」をシステムから完全に削除します。よろしいですか？`;
+
+            if (confirm(confirmText)) {
+                // Delete from accounts
+                state.accounts.forEach(a => {
+                    if (a.balances) delete a.balances[currId];
+                });
+                
+                // Delete from currency list
+                state.currencies = state.currencies.filter(c => c.id !== currId);
+                
+                // Clean references or let ledger retain descriptions
+                saveState();
+                updateUI();
+                notify('success', `通貨「${curr.name}」を削除しました。`);
+            }
+        }
+
+        // Account Create / Edit
+        function handleSaveAccount(e) {
+            e.preventDefault();
+            const id = document.getElementById('account-id').value;
+            const name = document.getElementById('acc-name').value.trim();
+            const desc = document.getElementById('acc-desc').value.trim();
+
+            if (!name) {
+                notify('error', '口座名を入力してください。');
+                return;
+            }
+
+            if (id) {
+                // Edit
+                const index = state.accounts.findIndex(a => a.id === id);
+                if (index !== -1) {
+                    state.accounts[index].name = name;
+                    state.accounts[index].desc = desc;
+                    notify('success', `口座「${name}」を更新しました。`);
+                }
+            } else {
+                // Create
+                const newId = makeId('acc');
+                state.accounts.push({
+                    id: newId,
+                    name,
+                    desc,
+                    balances: {}
+                });
+                notify('success', `新規口座「${name}」を開設しました。`);
+            }
+
+            saveState();
+            closeModal('account-modal');
+            updateUI();
+        }
+
+        function deleteAccount(accId) {
+            const acc = state.accounts.find(a => a.id === accId);
+            if (!acc) return;
+
+            // Check assets
+            let hasAssets = false;
+            if (acc.balances) {
+                for (let currId in acc.balances) {
+                    if (acc.balances[currId] > 0) {
+                        hasAssets = true;
+                        break;
+                    }
+                }
+            }
+
+            const confirmMsg = hasAssets
+                ? `口座「${acc.name}」には残高が残っています。口座を閉鎖（削除）すると、これらの全ての資金が永久に失われます。本当に閉鎖しますか？`
+                : `口座「${acc.name}」を完全に閉鎖してよろしいですか？`;
+
+            if (confirm(confirmMsg)) {
+                state.accounts = state.accounts.filter(a => a.id !== accId);
+                saveState();
+                updateUI();
+                notify('success', `口座「${acc.name}」を閉鎖しました。`);
+            }
+        }
+
+
+        // Handle direct Mint/Burn
+        function handleMintBurn(e) {
+            e.preventDefault();
+            const action = document.querySelector('input[name="mintburn_type"]:checked').value;
+            const accId = document.getElementById('mintburn-account').value;
+            const currId = document.getElementById('mintburn-currency').value;
+            const amount = parseFloat(document.getElementById('mintburn-amount').value);
+            const note = document.getElementById('mintburn-note').value.trim() || (action === 'mint' ? '管理者による特別発行' : '管理者による回収');
+
+            if (!accId || !currId || isNaN(amount) || amount <= 0) {
+                notify('error', '数量が正しくありません。');
+                return;
+            }
+
+            const acc = state.accounts.find(a => a.id === accId);
+            const curr = state.currencies.find(c => c.id === currId);
+
+            if (!acc || !curr) {
+                notify('error', '口座、または通貨の指定に問題があります。');
+                return;
+            }
+
+            if (!acc.balances) acc.balances = {};
+            const currentBalance = acc.balances[currId] || 0;
+
+            if (action === 'burn' && currentBalance < amount) {
+                notify('error', `保有残高（${currentBalance} ${curr.symbol}）以上の数量を回収することはできません。`);
+                return;
+            }
+
+            // Apply mutation
+            if (action === 'mint') {
+                acc.balances[currId] = currentBalance + amount;
+            } else {
+                acc.balances[currId] = currentBalance - amount;
+                if (acc.balances[currId] === 0) {
+                    delete acc.balances[currId];
+                }
+            }
+
+            // Record transaction
+            state.transactions.unshift({
+                id: makeId('tx'),
+                timestamp: new Date().toISOString(),
+                type: action,
+                fromAccountId: action === 'mint' ? null : accId,
+                toAccountId: action === 'mint' ? accId : null,
+                currencyId: currId,
+                amount: amount,
+                toAmount: null,
+                description: note
+            });
+
+            saveState();
+            updateUI();
+            notify('success', `${acc.name}のアセット状況を修正しました。`);
+            
+            // Reset form partly
+            document.getElementById('mintburn-amount').value = '';
+            document.getElementById('mintburn-note').value = '';
+        }
+
+        // Handle transfers between wallets
+        function handleTransfer(e) {
+            e.preventDefault();
+            const fromId = document.getElementById('tx-from').value;
+            const toId = document.getElementById('tx-to').value;
+            const currId = document.getElementById('tx-currency').value;
+            const amount = parseFloat(document.getElementById('tx-amount').value);
+            const note = document.getElementById('tx-note').value.trim() || '資金移動';
+
+            if (fromId === toId) {
+                notify('error', '同一の口座に対して送金を行うことはできません。');
+                return;
+            }
+
+            if (isNaN(amount) || amount <= 0) {
+                notify('error', '数量を正しく指定してください。');
+                return;
+            }
+
+            const fromAcc = state.accounts.find(a => a.id === fromId);
+            const toAcc = state.accounts.find(a => a.id === toId);
+            const curr = state.currencies.find(c => c.id === currId);
+
+            if (!fromAcc || !toAcc || !curr) {
+                notify('error', 'データに不整合があります。');
+                return;
+            }
+
+            const fromBal = (fromAcc.balances && fromAcc.balances[currId]) || 0;
+            if (fromBal < amount) {
+                notify('error', `保有残高（${fromBal} ${curr.symbol}）が不足しています。`);
+                return;
+            }
+
+            // Perform transfer
+            fromAcc.balances[currId] = fromBal - amount;
+            if (fromAcc.balances[currId] === 0) {
+                delete fromAcc.balances[currId];
+            }
+
+            if (!toAcc.balances) toAcc.balances = {};
+            toAcc.balances[currId] = (toAcc.balances[currId] || 0) + amount;
+
+            // Log
+            state.transactions.unshift({
+                id: makeId('tx'),
+                timestamp: new Date().toISOString(),
+                type: 'transfer',
+                fromAccountId: fromId,
+                toAccountId: toId,
+                currencyId: currId,
+                amount: amount,
+                toAmount: null,
+                description: note
+            });
+
+            saveState();
+            updateUI();
+            notify('success', '資金移動が完了しました。');
+
+            document.getElementById('tx-amount').value = '';
+            document.getElementById('tx-note').value = '';
+            updateTransferLimits();
+        }
+
+        // Calculate rates dynamically on form input
+        function calculateExpectedSwap() {
+            const fromCurrId = document.getElementById('swap-from-curr').value;
+            const toCurrId = document.getElementById('swap-to-curr').value;
+            const amount = parseFloat(document.getElementById('swap-amount').value);
+
+            if (!fromCurrId || !toCurrId) return;
+
+            const fromCurr = state.currencies.find(c => c.id === fromCurrId);
+            const toCurr = state.currencies.find(c => c.id === toCurrId);
+
+            if (!fromCurr || !toCurr) return;
+
+            // Swap Rate Calculation:
+            // 1 GOLD = fromCurr.rate -> fromCurr.rate is "units per gold"
+            // So: amount (fromCurr) = amount / fromCurr.rate (GOLD)
+            // GOLD to toCurr: (amount / fromCurr.rate) * toCurr.rate
+            const conversionRate = toCurr.rate / fromCurr.rate;
+            
+            document.getElementById('swap-rate-hint').innerText = `交換レート: 1 ${fromCurr.symbol} = ${conversionRate.toFixed(4)} ${toCurr.symbol}`;
+
+            if (!isNaN(amount) && amount > 0) {
+                const result = amount * conversionRate;
+                document.getElementById('swap-result').value = `${result.toFixed(4)} ${toCurr.symbol}`;
+            } else {
+                document.getElementById('swap-result').value = '';
+            }
+        }
+
+        // Handle Intra-wallet Currency swap
+        function handleExchange(e) {
+            e.preventDefault();
+            const accId = document.getElementById('swap-account').value;
+            const fromCurrId = document.getElementById('swap-from-curr').value;
+            const toCurrId = document.getElementById('swap-to-curr').value;
+            const amount = parseFloat(document.getElementById('swap-amount').value);
+
+            if (fromCurrId === toCurrId) {
+                notify('error', '同一の通貨間での両替は不要です。');
+                return;
+            }
+
+            if (isNaN(amount) || amount <= 0) {
+                notify('error', '数量が不正です。');
+                return;
+            }
+
+            const acc = state.accounts.find(a => a.id === accId);
+            const fromCurr = state.currencies.find(c => c.id === fromCurrId);
+            const toCurr = state.currencies.find(c => c.id === toCurrId);
+
+            if (!acc || !fromCurr || !toCurr) {
+                notify('error', '無効な取引パラメータです。');
+                return;
+            }
+
+            const fromBal = (acc.balances && acc.balances[fromCurrId]) || 0;
+            if (fromBal < amount) {
+                notify('error', `保有残高（${fromBal} ${fromCurr.symbol}）が不足しています。`);
+                return;
+            }
+
+            // Calculation
+            const conversionRate = toCurr.rate / fromCurr.rate;
+            const receivedAmount = amount * conversionRate;
+
+            // Execute Swap
+            acc.balances[fromCurrId] = fromBal - amount;
+            if (acc.balances[fromCurrId] === 0) {
+                delete acc.balances[fromCurrId];
+            }
+
+            if (!acc.balances) acc.balances = {};
+            acc.balances[toCurrId] = (acc.balances[toCurrId] || 0) + receivedAmount;
+
+            // Log Transaction
+            state.transactions.unshift({
+                id: makeId('tx'),
+                timestamp: new Date().toISOString(),
+                type: 'exchange',
+                fromAccountId: accId,
+                toAccountId: accId,
+                currencyId: fromCurrId,
+                toCurrencyId: toCurrId,
+                amount: amount,
+                toAmount: receivedAmount,
+                description: `${fromCurr.symbol} を ${toCurr.symbol} へ両替（等価ベース交換）`
+            });
+
+            saveState();
+            updateUI();
+            notify('success', '両替が完了しました。');
+
+            document.getElementById('swap-amount').value = '';
+            document.getElementById('swap-result').value = '';
+            updateSwapLimits();
+        }
+
+        // Limit Helpers for Forms
+        function updateTransferLimits() {
+            const fromId = document.getElementById('tx-from').value;
+            const currId = document.getElementById('tx-currency').value;
+            
+            const acc = state.accounts.find(a => a.id === fromId);
+            const curr = state.currencies.find(c => c.id === currId);
+
+            if (acc && curr) {
+                const bal = (acc.balances && acc.balances[currId]) || 0;
+                document.getElementById('tx-max-hint').innerText = `保有残高: ${bal} ${curr.symbol}`;
+            } else {
+                document.getElementById('tx-max-hint').innerText = `保有残高: --`;
+            }
+        }
+
+        function updateSwapLimits() {
+            const accId = document.getElementById('swap-account').value;
+            const currId = document.getElementById('swap-from-curr').value;
+
+            const acc = state.accounts.find(a => a.id === accId);
+            const curr = state.currencies.find(c => c.id === currId);
+
+            if (acc && curr) {
+                const bal = (acc.balances && acc.balances[currId]) || 0;
+                document.getElementById('swap-max-hint').innerText = `保有残高: ${bal} ${curr.symbol}`;
+            } else {
+                document.getElementById('swap-max-hint').innerText = `保有残高: --`;
+            }
+        }
+
+
+        // Tab Switching
+        function switchTab(tabId) {
+            // Manage class triggers
+            document.querySelectorAll('section[id^="panel-"]').forEach(section => {
+                section.classList.add('hidden');
+            });
+            document.getElementById(`panel-${tabId}`).classList.remove('hidden');
+
+            // Header state updates
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.className = "tab-btn px-4 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/30 transition-all duration-200";
+            });
+            const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+            if (activeBtn) {
+                activeBtn.className = "tab-btn px-4 py-2 text-sm font-medium rounded-lg text-indigo-400 bg-slate-800/60 border border-indigo-500/20 transition-all duration-200";
+            }
+
+            // Mobile menu updates
+            document.querySelectorAll('.mobile-tab-btn').forEach(btn => {
+                btn.classList.replace('text-indigo-400', 'text-slate-400');
+            });
+            const mActiveBtn = document.getElementById(`m-tab-btn-${tabId}`);
+            if (mActiveBtn) {
+                mActiveBtn.classList.replace('text-slate-400', 'text-indigo-400');
+            }
+
+            // Performance refresh for charts
+            if (tabId === 'dashboard') {
+                renderPortfolioChart();
+            }
+        }
+
+        // Modal triggers
+        function openModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.remove('hidden');
+            
+            // Context triggers inside modal opens
+            if (modalId === 'currency-modal') {
+                // Populate initial allocation options
+                const select = document.getElementById('curr-initial-account');
+                select.innerHTML = '<option value="">(配分しない・0スタート)</option>';
+                state.accounts.forEach(a => {
+                    select.innerHTML += `<option value="${a.id}">${a.name}</option>`;
+                });
+                
+                // Set default action state (Create new mode)
+                document.getElementById('currency-modal-title').innerText = "新規架空通貨の設定";
+                document.getElementById('currency-id').value = '';
+                document.getElementById('currency-form').reset();
+                document.getElementById('currency-mint-fields').classList.remove('hidden');
+            } else if (modalId === 'account-modal') {
+                document.getElementById('account-modal-title').innerText = "新規口座の作成";
+                document.getElementById('account-id').value = '';
+                document.getElementById('account-form').reset();
+            }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        // Prepopulate data when editing
+        function openEditCurrency(currId) {
+            const curr = state.currencies.find(c => c.id === currId);
+            if (!curr) return;
+
+            openModal('currency-modal');
+            document.getElementById('currency-modal-title').innerText = `通貨の再編集: ${curr.symbol}`;
+            document.getElementById('currency-id').value = curr.id;
+            document.getElementById('curr-name').value = curr.name;
+            document.getElementById('curr-symbol').value = curr.symbol;
+            document.getElementById('curr-rate').value = curr.rate;
+            document.getElementById('curr-color').value = curr.color;
+            document.getElementById('curr-desc').value = curr.description || '';
+            
+            // Hide initial allocation in edit mode
+            document.getElementById('currency-mint-fields').classList.add('hidden');
+        }
+
+        function openEditAccount(accId) {
+            const acc = state.accounts.find(a => a.id === accId);
+            if (!acc) return;
+
+            openModal('account-modal');
+            document.getElementById('account-modal-title').innerText = `口座情報の編集: ${acc.name}`;
+            document.getElementById('account-id').value = acc.id;
+            document.getElementById('acc-name').value = acc.name;
+            document.getElementById('acc-desc').value = acc.desc || '';
+        }
+
+
+        // Compute valuation of a specific balance in base "GOLD"
+        function getValuationInGold(currId, amount) {
+            const curr = state.currencies.find(c => c.id === currId);
+            if (!curr || isNaN(amount)) return 0;
+            // 1 GOLD = rate units
+            // Therefore, 1 unit = 1 / rate GOLD
+            return amount / curr.rate;
+        }
+
+        // Aggregate statistics
+        function renderStatistics() {
+            document.getElementById('stat-currency-count').innerText = state.currencies.length;
+            document.getElementById('stat-account-count').innerText = state.accounts.length;
+            document.getElementById('stat-tx-count').innerText = state.transactions.length;
+
+            if (state.transactions.length > 0) {
+                const latest = new Date(state.transactions[0].timestamp);
+                document.getElementById('stat-last-tx-time').innerText = `最終: ${latest.toLocaleTimeString()}`;
+            } else {
+                document.getElementById('stat-last-tx-time').innerText = '';
+            }
+        }
+
+        // Dynamic Portfolio Shares visualization
+        function renderPortfolioChart() {
+            if (portfolioChartInstance) {
+                portfolioChartInstance.destroy();
+            }
+
+            // Calculate aggregated GOLD valuation for each currency in existence
+            const totals = {};
+            state.currencies.forEach(c => {
+                totals[c.id] = 0;
+            });
+
+            state.accounts.forEach(acc => {
+                if (acc.balances) {
+                    for (let cid in acc.balances) {
+                        if (totals[cid] !== undefined) {
+                            totals[cid] += acc.balances[cid];
+                        }
+                    }
+                }
+            });
+
+            // Prepare chart components
+            const labels = [];
+            const data = [];
+            const backgroundColors = [];
+            let totalMarketGoldValuation = 0;
+
+            state.currencies.forEach(c => {
+                const goldValue = getValuationInGold(c.id, totals[c.id]);
+                if (goldValue > 0) {
+                    labels.push(`${c.name} (${c.symbol})`);
+                    data.push(goldValue);
+                    backgroundColors.push(c.color || '#cccccc');
+                    totalMarketGoldValuation += goldValue;
+                }
+            });
+
+            if (totalMarketGoldValuation === 0) {
+                document.getElementById('no-chart-data').classList.remove('hidden');
+                return;
+            } else {
+                document.getElementById('no-chart-data').classList.add('hidden');
+            }
+
+            const ctx = document.getElementById('portfolioChart').getContext('2d');
+            portfolioChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        borderWidth: 2,
+                        borderColor: '#0f172a'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: {
+                                color: '#94a3b8',
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed;
+                                    const percentage = ((value / totalMarketGoldValuation) * 100).toFixed(1);
+                                    return ` 評価価値: ${value.toFixed(2)} GOLD (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+
+        // Redraw lists, forms dropdown options & tables
+        function updateUI() {
+            renderStatistics();
+            renderDashboardCurrencyTable();
+            renderDashboardAccounts();
+            renderCurrenciesList();
+            renderAccountsManagerList();
+            populateSelectOptions();
+            filterLedger();
+        }
+
+        function renderDashboardCurrencyTable() {
+            const tbody = document.getElementById('dashboard-currency-tbody');
+            tbody.innerHTML = '';
+
+            // Calculate current supply of each currency
+            const supplies = {};
+            state.currencies.forEach(c => supplies[c.id] = 0);
+
+            state.accounts.forEach(acc => {
+                if (acc.balances) {
+                    for (let cid in acc.balances) {
+                        if (supplies[cid] !== undefined) {
+                            supplies[cid] += acc.balances[cid];
+                        }
+                    }
+                }
+            });
+
+            state.currencies.forEach(c => {
+                const supply = supplies[c.id];
+                const goldValue = getValuationInGold(c.id, supply);
+
+                const row = document.createElement('tr');
+                row.className = "hover:bg-slate-900/30 transition-all";
+                row.innerHTML = `
+                    <td class="py-3 font-medium flex items-center space-x-2">
+                        <span class="w-3 h-3 rounded-full inline-block" style="background-color: ${c.color}"></span>
+                        <span class="text-white">${c.name}</span>
+                        <span class="text-xs text-slate-500">[${c.symbol}]</span>
+                    </td>
+                    <td class="py-3 text-right text-slate-200 font-mono font-medium">${supply.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 4})} ${c.symbol}</td>
+                    <td class="py-3 text-right text-slate-400 font-mono">1 G = ${c.rate} ${c.symbol}</td>
+                    <td class="py-3 text-right text-indigo-400 font-bold font-mono">${goldValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} GOLD</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function renderDashboardAccounts() {
+            const container = document.getElementById('dashboard-accounts-grid');
+            container.innerHTML = '';
+
+            if (state.accounts.length === 0) {
+                container.innerHTML = `
+                    <div class="col-span-full py-12 flex flex-col items-center justify-center text-slate-500 border-2 border-dashed border-slate-800 rounded-2xl">
+                        <span>口座情報がありません。新しい口座を開設してください。</span>
+                    </div>
+                `;
+                return;
+            }
+
+            state.accounts.forEach(acc => {
+                const card = document.createElement('div');
+                card.className = "glass-panel p-5 rounded-2xl hover:border-slate-600 transition-all duration-200 flex flex-col justify-between";
+                
+                // Compute total asset evaluation
+                let totalGoldValue = 0;
+                let balanceHtml = '';
+
+                if (acc.balances && Object.keys(acc.balances).length > 0) {
+                    for (let cid in acc.balances) {
+                        const curr = state.currencies.find(c => c.id === cid);
+                        const balance = acc.balances[cid];
+                        if (curr && balance > 0) {
+                            totalGoldValue += getValuationInGold(cid, balance);
+                            balanceHtml += `
+                                <div class="flex justify-between items-center text-xs py-1">
+                                    <span class="text-slate-400 flex items-center">
+                                        <span class="w-2 h-2 rounded-full mr-1.5" style="background-color: ${curr.color}"></span>
+                                        ${curr.name}
+                                    </span>
+                                    <span class="text-white font-semibold font-mono">${balance.toLocaleString()} ${curr.symbol}</span>
+                                </div>
+                            `;
+                        }
+                    }
+                } else {
+                    balanceHtml = '<div class="text-xs text-slate-500 text-center py-2">アセットを保有していません</div>';
+                }
+
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <h4 class="font-bold text-white">${acc.name}</h4>
+                                <p class="text-[10px] text-slate-400 line-clamp-1">${acc.desc || '説明なし'}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-1 bg-slate-900/40 border border-slate-800/40 rounded-xl p-3 my-3">
+                            <span class="text-[10px] block font-bold text-slate-500 tracking-wider">ポートフォリオ</span>
+                            ${balanceHtml}
+                        </div>
+                    </div>
+
+                    <div class="border-t border-slate-800 pt-3 flex justify-between items-center mt-3">
+                        <span class="text-[10px] text-slate-400 uppercase tracking-wider block">ベース総価値</span>
+                        <span class="text-sm font-bold text-emerald-400 font-mono">${totalGoldValue.toLocaleString(undefined, {minimumFractionDigits: 2})} GOLD</span>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderCurrenciesList() {
+            const container = document.getElementById('currencies-list-grid');
+            container.innerHTML = '';
+
+            state.currencies.forEach(c => {
+                const card = document.createElement('div');
+                card.className = "glass-panel p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden";
+                card.style.borderLeft = `4px solid ${c.color}`;
+
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold text-white mb-1 inline-block" style="background-color: ${c.color}">
+                                    ${c.symbol}
+                                </span>
+                                <h4 class="font-bold text-white text-lg">${c.name}</h4>
+                            </div>
+                            
+                            <div class="flex items-center space-x-1">
+                                <button onclick="openEditCurrency('${c.id}')" class="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-all" title="編集">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                </button>
+                                ${!c.isDefault ? `
+                                <button onclick="deleteCurrency('${c.id}')" class="p-1 text-rose-500 hover:text-rose-400 hover:bg-rose-950/20 rounded transition-all" title="削除">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <p class="text-xs text-slate-400 leading-relaxed mb-4 min-h-[40px]">${c.description || '世界観設定などの説明はありません。'}</p>
+                    </div>
+
+                    <div class="border-t border-slate-800 pt-3 flex justify-between items-center bg-slate-900/20 -mx-5 -mb-5 p-5 mt-4">
+                        <span class="text-xs text-slate-400">対基準金貨レート:</span>
+                        <span class="text-sm font-bold text-white font-mono">1 GOLD = ${c.rate} ${c.symbol}</span>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderAccountsManagerList() {
+            const container = document.getElementById('accounts-management-list');
+            container.innerHTML = '';
+
+            state.accounts.forEach(acc => {
+                const element = document.createElement('div');
+                element.className = "glass-panel p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:border-slate-700 transition-all";
+
+                let innerBalances = '';
+                if (acc.balances && Object.keys(acc.balances).length > 0) {
+                    for (let cid in acc.balances) {
+                        const curr = state.currencies.find(c => c.id === cid);
+                        if (curr && acc.balances[cid] > 0) {
+                            innerBalances += `
+                                <span class="inline-flex items-center text-xs bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200">
+                                    <span class="w-1.5 h-1.5 rounded-full mr-1.5" style="background-color: ${curr.color}"></span>
+                                    ${acc.balances[cid]} ${curr.symbol}
+                                </span>
+                            `;
+                        }
+                    }
+                } else {
+                    innerBalances = '<span class="text-xs text-slate-500">残高なし</span>';
+                }
+
+                element.innerHTML = `
+                    <div class="space-y-1 flex-grow">
+                        <div class="flex items-center space-x-2">
+                            <h4 class="font-bold text-white text-lg">${acc.name}</h4>
+                            <span class="text-[10px] text-slate-500 font-mono">ID: ${acc.id}</span>
+                        </div>
+                        <p class="text-xs text-slate-400">${acc.desc || '（備考なし）'}</p>
+                        
+                        <div class="flex flex-wrap gap-1.5 pt-2">
+                            ${innerBalances}
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-2 self-end md:self-auto border-t md:border-t-0 border-slate-800/80 pt-3 md:pt-0 w-full md:w-auto justify-end">
+                        <button onclick="openEditAccount('${acc.id}')" class="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-all flex items-center space-x-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-width="2"/></svg>
+                            <span>編集</span>
+                        </button>
+                        <button onclick="deleteAccount('${acc.id}')" class="px-3 py-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg border border-rose-500/20 transition-all flex items-center space-x-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2"/></svg>
+                            <span>閉鎖</span>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(element);
+            });
+        }
+
+        // Dropdowns setup for Forms
+        function populateSelectOptions() {
+            // Dropdowns on Transaction & Operations tab
+            const txFromSelect = document.getElementById('tx-from');
+            const txToSelect = document.getElementById('tx-to');
+            const txCurrSelect = document.getElementById('tx-currency');
+
+            const swapAccSelect = document.getElementById('swap-account');
+            const swapFromCurrSelect = document.getElementById('swap-from-curr');
+            const swapToCurrSelect = document.getElementById('swap-to-curr');
+
+            const mintBurnAccSelect = document.getElementById('mintburn-account');
+            const mintBurnCurrSelect = document.getElementById('mintburn-currency');
+
+            const ledgerFilterCurrSelect = document.getElementById('ledger-filter-currency');
+
+            // Clear previous
+            txFromSelect.innerHTML = '';
+            txToSelect.innerHTML = '';
+            txCurrSelect.innerHTML = '';
+            swapAccSelect.innerHTML = '';
+            swapFromCurrSelect.innerHTML = '';
+            swapToCurrSelect.innerHTML = '';
+            mintBurnAccSelect.innerHTML = '';
+            mintBurnCurrSelect.innerHTML = '';
+
+            // Setup options
+            state.accounts.forEach(a => {
+                const optHtml = `<option value="${a.id}">${a.name}</option>`;
+                txFromSelect.innerHTML += optHtml;
+                txToSelect.innerHTML += optHtml;
+                swapAccSelect.innerHTML += optHtml;
+                mintBurnAccSelect.innerHTML += optHtml;
+            });
+
+            state.currencies.forEach(c => {
+                const optHtml = `<option value="${c.id}">${c.name} (${c.symbol})</option>`;
+                txCurrSelect.innerHTML += optHtml;
+                swapFromCurrSelect.innerHTML += optHtml;
+                swapToCurrSelect.innerHTML += optHtml;
+                mintBurnCurrSelect.innerHTML += optHtml;
+            });
+
+            // Ledger filter setup
+            ledgerFilterCurrSelect.innerHTML = '<option value="all">すべての通貨</option>';
+            state.currencies.forEach(c => {
+                ledgerFilterCurrSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+            });
+
+            // Refresh limit calculations
+            updateTransferLimits();
+            updateSwapLimits();
+            calculateExpectedSwap();
+        }
+
+
+        function filterLedger() {
+            const query = document.getElementById('ledger-search').value.toLowerCase();
+            const filterType = document.getElementById('ledger-filter-type').value;
+            const filterCurrId = document.getElementById('ledger-filter-currency').value;
+
+            const tbody = document.getElementById('ledger-tbody');
+            tbody.innerHTML = '';
+
+            let filteredList = state.transactions;
+
+            if (filterType !== 'all') {
+                filteredList = filteredList.filter(t => t.type === filterType);
+            }
+
+            if (filterCurrId !== 'all') {
+                filteredList = filteredList.filter(t => t.currencyId === filterCurrId || t.toCurrencyId === filterCurrId);
+            }
+
+            if (query) {
+                filteredList = filteredList.filter(t => 
+                    (t.description && t.description.toLowerCase().includes(query)) ||
+                    t.id.toLowerCase().includes(query)
+                );
+            }
+
+            if (filteredList.length === 0) {
+                document.getElementById('ledger-empty-state').classList.remove('hidden');
+                return;
+            } else {
+                document.getElementById('ledger-empty-state').classList.add('hidden');
+            }
+
+            filteredList.forEach(t => {
+                const date = new Date(t.timestamp);
+                const readableDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                
+                const fromAcc = state.accounts.find(a => a.id === t.fromAccountId) || { name: '外部・管理者' };
+                const toAcc = state.accounts.find(a => a.id === t.toAccountId) || { name: '外部・回収' };
+                const curr = state.currencies.find(c => c.id === t.currencyId) || { symbol: '?', color: '#ccc' };
+
+                let typeLabel = '';
+                let detailsText = '';
+                let amountHtml = '';
+
+                if (t.type === 'transfer') {
+                    typeLabel = `<span class="px-2 py-0.5 rounded text-xs font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">送金移動</span>`;
+                    detailsText = `<div class="flex items-center space-x-1.5 text-xs">
+                        <span class="text-slate-200 font-semibold">${fromAcc.name}</span>
+                        <span class="text-slate-500">&rarr;</span>
+                        <span class="text-slate-200 font-semibold">${toAcc.name}</span>
+                    </div>`;
+                    amountHtml = `<span class="text-white font-semibold font-mono">${t.amount.toLocaleString()} ${curr.symbol}</span>`;
+                } else if (t.type === 'exchange') {
+                    const toCurr = state.currencies.find(c => c.id === t.toCurrencyId) || { symbol: '?', color: '#ccc' };
+                    typeLabel = `<span class="px-2 py-0.5 rounded text-xs font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">両替両替</span>`;
+                    detailsText = `<div class="text-xs">
+                        <span class="text-slate-400">口座: </span><span class="text-slate-200 font-semibold">${fromAcc.name}</span>
+                    </div>`;
+                    amountHtml = `<div class="text-right font-mono">
+                        <span class="text-rose-400 text-xs font-medium">-${t.amount.toLocaleString()} ${curr.symbol}</span><br>
+                        <span class="text-emerald-400 font-bold">&rarr; +${t.toAmount.toLocaleString()} ${toCurr.symbol}</span>
+                    </div>`;
+                } else if (t.type === 'mint') {
+                    typeLabel = `<span class="px-2 py-0.5 rounded text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">新規発行</span>`;
+                    detailsText = `<div class="text-xs">
+                        <span class="text-slate-400">発行先: </span><span class="text-slate-200 font-semibold">${toAcc.name}</span>
+                    </div>`;
+                    amountHtml = `<span class="text-emerald-400 font-bold font-mono">+${t.amount.toLocaleString()} ${curr.symbol}</span>`;
+                } else if (t.type === 'burn') {
+                    typeLabel = `<span class="px-2 py-0.5 rounded text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">回収削減</span>`;
+                    detailsText = `<div class="text-xs">
+                        <span class="text-slate-400">回収元: </span><span class="text-slate-200 font-semibold">${fromAcc.name}</span>
+                    </div>`;
+                    amountHtml = `<span class="text-rose-400 font-bold font-mono">-${t.amount.toLocaleString()} ${curr.symbol}</span>`;
+                }
+
+                const row = document.createElement('tr');
+                row.className = "hover:bg-slate-900/20 transition-all";
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-xs text-slate-400 font-mono">${readableDate}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${typeLabel}</td>
+                    <td class="px-6 py-4">${detailsText}</td>
+                    <td class="px-6 py-4 text-right whitespace-nowrap">${amountHtml}</td>
+                    <td class="px-6 py-4 text-xs">
+                        <div class="text-slate-300 font-medium">${t.description || '（メモなし）'}</div>
+                        <div class="text-[9px] text-slate-500 font-mono mt-0.5">${t.id}</div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function clearLedger() {
+            if (confirm("全ての取引履歴・台帳レコードのみを消去します（各口座の残高は維持されます）。よろしいですか？")) {
+                state.transactions = [];
+                saveState();
+                updateUI();
+                notify('success', '履歴ログをすべてクリアしました。');
+            }
+        }
+
+        // Trigger on window loads
+        window.onload = function() {
+            initApp();
+        };
+    </script>
+</body>
+</html>
