@@ -68,7 +68,6 @@
         <div class="flex-1 overflow-y-auto p-3 bg-slate-800 resizable-panel-y" id="panelContent">
             <div id="rankingList" class="flex flex-col gap-2"></div>
             <div id="logList" class="hidden flex-col gap-2 text-sm text-slate-300"></div>
-            <div id="nationOps" class="hidden flex-col gap-2 text-sm text-slate-300"></div>
         </div>
     </div>
 
@@ -110,11 +109,11 @@
         </div>
     </div>
 
-    <!-- 国家運営イベント・要請モーダル -->
+    <!-- 外交イベント・要請モーダル -->
     <div id="requestModal" class="hidden fixed inset-0 z-50 bg-black/80 items-center justify-center p-4 backdrop-blur-sm">
         <div class="w-full max-w-md rounded-lg border-2 border-amber-500/50 bg-slate-900 p-6 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
             <h2 id="reqModalTitle" class="text-xl font-bold text-amber-400 mb-4 flex items-center gap-2">
-                <span>⚠️</span> 国家運営イベント
+                <span>⚠️</span> 外交イベント
             </h2>
             <p id="reqModalMessage" class="text-sm text-slate-200 mb-6 whitespace-pre-wrap leading-relaxed bg-slate-800 p-3 rounded"></p>
             <div class="flex justify-end gap-3">
@@ -187,6 +186,8 @@
         
         let pendingRequests = [];
         let requestQueue = [];
+        let playerWarControls = {};
+        let playerAdvanceTarget = null;
         let isRequestModalOpen = false;
         let requestIdCounter = 1;
         
@@ -240,7 +241,6 @@
                     military: (Math.random() * 2 - 1) * this.intelError
                 };
                 this.wars = new Set();
-                this.canAdvanceWars = true;
                 this.hasSeaAccess = false;
             }
         }
@@ -544,7 +544,7 @@
                     if (!enemy) continue;
                     if (civ.nonAggressionPacts.has(enemy.id) || civ.alliances.has(enemy.id)) continue;
                     if ((civ.id === playerCivId || enemy.id === playerCivId) && !areAtWar(civ, enemy)) continue;
-                    if (civ.id === playerCivId && !civ.canAdvanceWars) continue;
+                    if (civ.id === playerCivId && playerWarControls[enemy.id]?.paused) continue;
                     let myAtk = civ.military * (0.6 + Math.random() * 0.8);
                     let defDef = enemy.military * (0.6 + Math.random() * 0.8) * 1.3;
                     if (target.type === 2) defDef *= 1.6;
@@ -711,6 +711,16 @@
                 hoverY = Math.floor((cy - drawOffsetY) / drawScale);
             });
             uiCanvas.addEventListener('mouseleave', () => { hoverX = -1; hoverY = -1; });
+            uiCanvas.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                let rect = uiCanvas.getBoundingClientRect();
+                let cx = e.clientX - rect.left;
+                let cy = e.clientY - rect.top;
+                let x = Math.floor((cx - drawOffsetX) / drawScale);
+                let y = Math.floor((cy - drawOffsetY) / drawScale);
+                if (x<0||y<0||x>=MAP_WIDTH||y>=MAP_HEIGHT) return;
+                orderPlayerAdvance(x, y);
+            });
             uiCanvas.addEventListener('click', (e) => {
                 let rect = uiCanvas.getBoundingClientRect();
                 let cx = e.clientX - rect.left;
@@ -885,7 +895,6 @@
                 logHtml += `<div class="border-l-2 ${isMajor ? 'border-amber-500' : 'border-slate-600'} pl-3 py-1.5 ${colorClass}">${log}</div>`;
             });
             document.getElementById('logList').innerHTML = logHtml;
-            if (hasFoundedNation) renderNationOps();
             updateUISelection();
         }
 
@@ -915,15 +924,30 @@
 
         function declareWar(fromCiv, toCiv, viaRequest=false) {
             if (!fromCiv || !toCiv || fromCiv.id === toCiv.id) return;
+            const wasAtWar = areAtWar(fromCiv, toCiv);
             fromCiv.wars.add(toCiv.id);
             toCiv.wars.add(fromCiv.id);
-            logEvent(`⚔️ ${fromCiv.name}が${toCiv.name}へ宣戦布告。`);
+            if (!wasAtWar) {
+                logEvent(`⚔️ ${fromCiv.name}が${toCiv.name}へ宣戦布告。`);
+                registerPlayerWarReview(fromCiv, toCiv);
+            }
+        }
+
+        function registerPlayerWarReview(a, b) {
+            const player = getPlayerCiv();
+            if (!player) return;
+            const enemy = a.id === player.id ? b : b.id === player.id ? a : null;
+            if (!enemy) return;
+            playerWarControls[enemy.id] = { paused: false, nextReviewMonth: monthCount + 36 };
         }
 
         function endWar(a, b) {
             if (!a || !b) return;
             a.wars.delete(b.id);
             b.wars.delete(a.id);
+            delete playerWarControls[a.id];
+            delete playerWarControls[b.id];
+            if (playerAdvanceTarget && (playerAdvanceTarget.enemyId === a.id || playerAdvanceTarget.enemyId === b.id)) playerAdvanceTarget = null;
             logEvent(`🕊️ ${a.name}と${b.name}の戦争が終結。`);
         }
 
@@ -955,11 +979,12 @@
             const player = getPlayerCiv();
             const from = civs.find(c => c.id === req.fromId);
             const name = from ? from.name : '不明国家';
-            const labelMap = { alliance:'同盟の提案', nap:'不可侵条約の提案', war:'宣戦布告', cession:'領土割譲要求', demilitarize:'軍縮条約の要求', joinwar:'参戦要請' };
+            const labelMap = { alliance:'同盟の提案', nap:'不可侵条約の提案', war:'宣戦布告', warreview:'戦争継続判断', cession:'領土割譲要求', demilitarize:'軍縮条約の要求', joinwar:'参戦要請' };
             
             let msg = `${name} から ${labelMap[req.type] || req.type} が届いています。`;
             if (req.type === 'cession') msg += '\n※要求に応じなければ、関係が悪化し戦争に発展する恐れがあります。';
             if (req.type === 'war') msg = `${name} が我が国に宣戦布告を行いました！`;
+            if (req.type === 'warreview') msg = `${name}との戦争が3年継続しています。進軍を再開・続行しますか、それとも停戦しますか？`;
             if (req.type === 'joinwar') {
                 const target = civs.find(c => c.id === req.targetId);
                 if (target) msg += `\n目標: ${target.name}への攻撃`;
@@ -985,8 +1010,8 @@
             const btnAccept = document.getElementById('reqModalAccept');
             const btnReject = document.getElementById('reqModalReject');
             
-            btnAccept.textContent = req.type === 'war' ? '応戦する' : '受理する';
-            btnReject.textContent = req.type === 'war' ? '降伏する' : '却下する';
+            btnAccept.textContent = req.type === 'war' ? '応戦する' : req.type === 'warreview' ? '続行する' : '受理する';
+            btnReject.textContent = req.type === 'war' ? '降伏する' : req.type === 'warreview' ? '停戦する' : '却下する';
             
             btnReject.disabled = onlyAccept;
             btnReject.className = onlyAccept 
@@ -1101,6 +1126,10 @@
                     </div>`;
                     
                     const player = getPlayerCiv();
+                    if (playerAdvanceTarget && player && player.id === playerCivId) {
+                        const targetLabel = playerAdvanceTarget.enemyId ? '敵領へ進軍中' : '未開地へ進軍中';
+                        content += `<div class="text-xs text-rose-300 mt-2">作戦目標: (${playerAdvanceTarget.x}, ${playerAdvanceTarget.y}) / ${targetLabel}</div>`;
+                    }
                     if (player && !isPlayer) {
                         const isAlly = player.alliances.has(civ.id);
                         const isNap = player.nonAggressionPacts.has(civ.id);
@@ -1111,7 +1140,8 @@
                         const btnAlly = `<button onclick="issueDiplomacy(${civ.id},'alliance')" ${isAlly || isWar ? 'disabled' : ''} class="bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 px-2 py-1 rounded text-white">${isAlly ? '同盟済' : '同盟提案'}</button>`;
                         const btnNap = `<button onclick="issueDiplomacy(${civ.id},'nap')" ${isNap || isWar ? 'disabled' : ''} class="bg-sky-700 hover:bg-sky-600 disabled:opacity-40 px-2 py-1 rounded text-white">${isNap ? '不可侵済' : '不可侵提案'}</button>`;
                         const btnEmbargo = `<button onclick="issueDiplomacy(${civ.id},'embargo')" ${isEmbargo ? 'disabled' : ''} class="bg-orange-700 hover:bg-orange-600 disabled:opacity-40 px-2 py-1 rounded text-white">${isEmbargo ? '通商禁止中' : '通商禁止'}</button>`;
-                        const btnWar = `<button onclick="issueDiplomacy(${civ.id},'war')" ${(!canWar && !isWar) || isAlly ? 'disabled' : ''} class="bg-rose-700 hover:bg-rose-600 disabled:opacity-40 px-2 py-1 rounded text-white">${isWar ? (player.canAdvanceWars ? '進軍停止' : '進軍再開') : '宣戦布告'}</button>`;
+                        const warPaused = !!playerWarControls[civ.id]?.paused;
+                        const btnWar = `<button onclick="issueDiplomacy(${civ.id},'war')" ${(!canWar && !isWar) || isAlly ? 'disabled' : ''} class="bg-rose-700 hover:bg-rose-600 disabled:opacity-40 px-2 py-1 rounded text-white">${isWar ? (warPaused ? '進軍再開' : '進軍停止') : '宣戦布告'}</button>`;
 
                         content += `<div class="grid grid-cols-2 gap-2 mt-2 text-xs">
                             ${btnAlly} ${btnNap} ${btnEmbargo} ${btnWar}
@@ -1122,6 +1152,71 @@
                 content += `<div class="text-slate-500 text-sm italic mt-3">未開の地</div>`;
             }
             selectionDiv.innerHTML = content;
+        }
+
+
+        function orderPlayerAdvance(x, y) {
+            const player = getPlayerCiv();
+            if (!player) { showAlert('先に建国してください。'); return; }
+            const cell = map[x][y];
+            if (cell.type === 0) { showAlert('海には進軍できません。陸地を指定してください。'); return; }
+            if (cell.civId === player.id) { showAlert('既に自国領です。'); return; }
+            const targetOwner = cell.civId ? civs.find(c => c.id === cell.civId && c.isAlive) : null;
+            if (targetOwner) {
+                if (player.alliances.has(targetOwner.id)) { showAlert('同盟国の領土には進軍できません。'); return; }
+                if (!areAtWar(player, targetOwner)) declareWar(player, targetOwner);
+                playerWarControls[targetOwner.id].paused = false;
+            }
+            playerAdvanceTarget = { x, y, enemyId: targetOwner?.id || null };
+            logEvent(`🎯 ${player.name}が座標(${x},${y})への進軍を命令。${targetOwner ? targetOwner.name + '領のため戦争状態へ移行。' : '未開地の占領を開始。'}`);
+            showAlert(`【進軍命令】\n座標(${x}, ${y})へ進軍します。${targetOwner ? '\n対象が他国領のため自動で宣戦布告しました。' : ''}`);
+        }
+
+        function advancePlayerTowardTarget() {
+            const player = getPlayerCiv();
+            if (!player || !playerAdvanceTarget) return;
+            const tx = playerAdvanceTarget.x, ty = playerAdvanceTarget.y;
+            const targetCell = map[tx]?.[ty];
+            if (!targetCell || targetCell.type === 0 || targetCell.civId === player.id) { playerAdvanceTarget = null; return; }
+            if (playerAdvanceTarget.enemyId && playerWarControls[playerAdvanceTarget.enemyId]?.paused) return;
+            let best = null;
+            for (const key of player.territory) {
+                const [x,y] = key.split(',').map(Number);
+                for (const [dx,dy] of dirs4) {
+                    const nx=x+dx, ny=y+dy;
+                    if (nx<0||ny<0||nx>=MAP_WIDTH||ny>=MAP_HEIGHT) continue;
+                    const cell = map[nx][ny];
+                    if (cell.type === 0 || cell.civId === player.id) continue;
+                    const score = Math.abs(nx-tx) + Math.abs(ny-ty);
+                    if (!best || score < best.score) best = {x:nx,y:ny,score};
+                }
+            }
+            if (!best) return;
+            const cell = map[best.x][best.y];
+            if (cell.civId === null) { claimCell(best.x, best.y, player); return; }
+            const enemy = civs.find(c => c.id === cell.civId && c.isAlive);
+            if (!enemy || player.alliances.has(enemy.id)) return;
+            if (!areAtWar(player, enemy)) declareWar(player, enemy);
+            if (playerWarControls[enemy.id]?.paused) return;
+            const attack = player.military * (0.7 + Math.random() * 0.8);
+            let defense = enemy.military * (0.55 + Math.random() * 0.75) * (cell.type === 2 ? 1.45 : 1.0);
+            if (attack > defense) transferCell(best.x, best.y, enemy, player);
+        }
+
+        function reviewPlayerWars() {
+            const player = getPlayerCiv();
+            if (!player) return;
+            Object.keys(playerWarControls).forEach(id => {
+                const enemy = civs.find(c => c.id === Number(id) && c.isAlive);
+                if (!enemy || !areAtWar(player, enemy)) { delete playerWarControls[id]; return; }
+                const control = playerWarControls[id];
+                if (monthCount >= control.nextReviewMonth) {
+                    control.nextReviewMonth = monthCount + 36;
+                    const req = { id: requestIdCounter++, type:'warreview', fromId: enemy.id, toId: player.id, status:'pending' };
+                    pendingRequests.push(req);
+                    enqueueRequestAlert(req);
+                }
+            });
         }
 
         // --- 外交アクションと確率判定 ---
@@ -1154,9 +1249,11 @@
                 showAlert(`【通商禁止 通告】\n${target.name} に対して通商禁止を通告しました。`);
             } else if (action === 'war') {
                 if (areAtWar(player, target)) {
-                    player.canAdvanceWars = !player.canAdvanceWars;
-                    logEvent(`🪖 ${player.name}が${player.canAdvanceWars ? '進軍再開' : '進軍停止'}を指示。`);
-                    showAlert(`【作戦変更】\n${target.name} 方面の部隊へ ${player.canAdvanceWars ? '進軍再開' : '進軍停止'} を指示しました。`);
+                    if (!playerWarControls[target.id]) registerPlayerWarReview(player, target);
+                    playerWarControls[target.id].paused = !playerWarControls[target.id].paused;
+                    const resumed = !playerWarControls[target.id].paused;
+                    logEvent(`🪖 ${player.name}が${target.name}方面の${resumed ? '進軍再開' : '進軍停止'}を指示。`);
+                    showAlert(`【作戦変更】\n${target.name} 方面の部隊へ ${resumed ? '進軍再開' : '進軍停止'} を指示しました。`);
                 } else if (areAdjacentOrSeaLinked(player, target)) {
                     declareWar(player, target);
                     showAlert(`【宣戦布告】\n${target.name} へ宣戦布告を行いました。作戦を開始します。`);
@@ -1178,8 +1275,11 @@
                 if (decision === 'accept') { player.nonAggressionPacts.add(from.id); from?.nonAggressionPacts.add(player.id); applyBigImpact(player, 1); }
                 else applyBigImpact(player, -1);
             } else if (req.type === 'war') {
-                if (decision === 'accept') { declareWar(player, from, true); player.canAdvanceWars = true; req.status = 'ongoing'; }
+                if (decision === 'accept') { declareWar(player, from, true); if (from && playerWarControls[from.id]) playerWarControls[from.id].paused = false; req.status = 'ongoing'; }
                 else { applyBigImpact(player, -1); endWar(player, from); req.forcedCession = true; }
+            } else if (req.type === 'warreview') {
+                if (decision === 'accept' && from) { playerWarControls[from.id] = { paused: false, nextReviewMonth: monthCount + 36 }; logEvent(`🪖 ${player.name}が${from.name}との戦争続行を決定。`); }
+                else if (from) { endWar(player, from); logEvent(`🕊️ ${player.name}が${from.name}との停戦を選択。`); }
             } else if (req.type === 'cession') {
                 if (decision === 'accept' || req.forced) {
                     req.demandedTiles?.forEach(t => { if (map[t.x][t.y].civId === player.id && from) transferCell(t.x, t.y, player, from); });
@@ -1195,43 +1295,11 @@
             }
             if (!(req.type === 'war' && decision === 'accept')) req.status = 'resolved';
             logEvent(`📜 要請「${req.type}」を${decision === 'accept' ? '受理' : '却下'}。`);
-            renderNationOps();
         }
         window.resolveRequest = resolveRequest;
 
-        function renderNationOps() {
-            const box = document.getElementById('nationOps');
-            pendingRequests.forEach(r => {
-                if (r.type === 'war' && r.status === 'ongoing') {
-                    const player = getPlayerCiv();
-                    const from = civs.find(c => c.id === r.fromId);
-                    if (!player || !from || !areAtWar(player, from)) r.status = 'resolved';
-                }
-            });
-            const unresolved = pendingRequests.filter(r => r.status === 'pending' || r.status === 'ongoing');
-            blinkingDemandTiles = [];
-            if (!unresolved.length) {
-                box.innerHTML = '<div class="text-slate-400 text-xs">現在、対応が必要な国家運営イベントはありません。</div>';
-                return;
-            }
-            box.innerHTML = unresolved.map(req => {
-                const from = civs.find(c => c.id === req.fromId);
-                const name = from?.name || '不明国家';
-                if (req.type === 'cession' && req.demandedTiles && from) {
-                    req.demandedTiles.forEach(t => blinkingDemandTiles.push({ ...t, color: from.color }));
-                }
-                const onlyAccept = req.type === 'cession' && req.forced;
-                const labelMap = { alliance:'同盟要請', nap:'不可侵要請', war:'交戦中', cession:'領土割譲要求', demilitarize:'軍縮条約', joinwar:'参戦要請' };
-                return `<div class="p-2 rounded border border-slate-600 bg-slate-900/80">
-                    <div class="font-bold text-amber-300">${labelMap[req.type] || req.type}</div>
-                    <div class="text-xs text-slate-300 mt-1">${name}${req.type==='joinwar'?' から参戦要請':''}${req.type==='cession'?'（要求地はマップ上で点滅）':''}</div>
-                    <div class="mt-2 flex gap-2">
-                        <button onclick="resolveRequest(${req.id},'accept')" class="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-xs text-white">${req.type==='war' && req.status==='ongoing'?'進軍継続':req.type==='war'?'応戦':'受理'}</button>
-                        <button onclick="resolveRequest(${req.id},'reject')" ${onlyAccept ? 'disabled' : ''} class="px-2 py-1 rounded bg-rose-700 hover:bg-rose-600 disabled:opacity-40 text-xs text-white">${req.type==='war'?'降伏':'却下'}</button>
-                    </div>
-                </div>`;
-            }).join('');
-        }
+
+
 
         // --- 方針の表示と適用 ---
         function openPolicyModal() {
@@ -1285,7 +1353,7 @@
                 const saveData = {
                     map: mapData,
                     civs: civsData,
-                    monthCount, civIdCounter, cityIdCounter, logs, playerCivId, hasFoundedNation, currentPolicy, activeTradeRoutes, activeShips
+                    monthCount, civIdCounter, cityIdCounter, logs, playerCivId, hasFoundedNation, currentPolicy, activeTradeRoutes, activeShips, playerWarControls, playerAdvanceTarget
                 };
                 textarea.value = JSON.stringify(saveData);
             } else {
@@ -1350,6 +1418,8 @@
                 currentPolicy = data.currentPolicy || null;
                 activeTradeRoutes = data.activeTradeRoutes || [];
                 activeShips = data.activeShips || [];
+                playerWarControls = data.playerWarControls || {};
+                playerAdvanceTarget = data.playerAdvanceTarget || null;
 
                 pendingRequests = [];
                 requestQueue = [];
@@ -1359,7 +1429,7 @@
                 if (hasFoundedNation) {
                     const pCiv = civs.find(c => c.id === playerCivId);
                     if (!pCiv || !pCiv.isAlive) pauseLockReason = 'playerDefeated';
-                    document.getElementById('tabLog').textContent = '国家運営';
+                    document.getElementById('tabLog').textContent = '歴史年表';
                     document.getElementById('btnFound').disabled = true;
                     document.getElementById('btnFound').classList.add('opacity-40', 'cursor-not-allowed');
                 }
@@ -1437,6 +1507,8 @@
                 }
             });
 
+            advancePlayerTowardTarget();
+            reviewPlayerWars();
             updateDiplomacyAndTrade(civs.filter(c=>c.isAlive));
             updateShips();
             if (hasFoundedNation) generatePlayerRequests();
@@ -1489,16 +1561,14 @@
                 document.getElementById('tabLog').className = "flex-1 py-3 text-slate-400 hover:text-white transition bg-slate-900";
                 document.getElementById('rankingList').classList.remove('hidden');
                 document.getElementById('logList').classList.add('hidden');
-                document.getElementById('nationOps').classList.add('hidden');
             });
 
             document.getElementById('tabLog').addEventListener('click', () => {
                 activeTab = 'log';
                 document.getElementById('tabLog').className = "flex-1 py-3 bg-slate-700 text-white transition";
                 document.getElementById('tabRanking').className = "flex-1 py-3 text-slate-400 hover:text-white transition bg-slate-900";
-                document.getElementById(hasFoundedNation ? 'nationOps' : 'logList').classList.remove('hidden');
+                document.getElementById('logList').classList.remove('hidden');
                 document.getElementById('rankingList').classList.add('hidden');
-                document.getElementById(hasFoundedNation ? 'logList' : 'nationOps').classList.add('hidden');
             });
 
             const foundModal = document.getElementById('foundModal');
@@ -1524,17 +1594,15 @@
                 if (!civ) { showAlert('この地点には建国できません。'); return; }
                 document.getElementById('btnFound').disabled = true;
                 document.getElementById('btnFound').classList.add('opacity-40', 'cursor-not-allowed');
-                document.getElementById('tabLog').textContent = '国家運営';
+                document.getElementById('tabLog').textContent = '歴史年表';
                 foundModal.classList.add('hidden');
                 foundModal.classList.remove('flex');
                 
                 // 建国直後に最初の方針を決めさせる
                 openPolicyModal();
                 
-                renderNationOps();
                 if (activeTab === 'log') {
-                    document.getElementById('logList').classList.add('hidden');
-                    document.getElementById('nationOps').classList.remove('hidden');
+                    document.getElementById('logList').classList.remove('hidden');
                 }
             });
 
